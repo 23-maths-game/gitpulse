@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Generated reports (keep docs/demo-report.html, which is committed on purpose)
+gitpulse-report.html
+*.local.html
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
