@@ -88,3 +88,44 @@ def test_survives_hostile_commit_subject(sample_repo):
     )
     commits = gitread.read_commits(sample_repo)
     assert commits[0].subject == hostile
+
+
+# --------------------------------------------------------------------------- #
+# timestamp parsing — the Python 3.10 'Z' trap
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("raw", "hour", "offset_hours"),
+    [
+        ("2025-03-30T23:00:00Z", 23, 0),        # git emits bare Z for UTC …
+        ("2025-03-30T23:00:00z", 23, 0),        # … and we tolerate lowercase
+        ("2025-03-30T23:00:00+00:00", 23, 0),
+        ("2025-03-30T23:00:00+05:30", 23, 5.5),  # India — the author's real day
+        ("2025-03-30T23:00:00-0700", 23, -7),   # compact offset (git %ai shape)
+    ],
+)
+def test_parse_git_timestamp_accepts_every_git_offset(raw, hour, offset_hours):
+    """Regression guard: fromisoformat() rejects 'Z' before Python 3.11.
+
+    If this breaks, every UTC commit is silently dropped on 3.10 — an empty
+    report with no error at all.
+    """
+    ts = gitread.parse_git_timestamp(raw)
+    assert ts is not None
+    assert ts.hour == hour
+    assert ts.utcoffset().total_seconds() == offset_hours * 3600
+
+
+def test_parse_git_timestamp_rejects_garbage():
+    assert gitread.parse_git_timestamp("not a date") is None
+    assert gitread.parse_git_timestamp("") is None
+
+
+def test_utc_commits_are_not_dropped():
+    """End-to-end proof that a UTC-timestamped commit survives parsing."""
+    from datetime import datetime, timezone
+
+    from gitpulse.models import Commit
+
+    stamp = gitread.parse_git_timestamp("2025-03-30T23:00:00Z")
+    assert stamp == datetime(2025, 3, 30, 23, tzinfo=timezone.utc)
+    assert Commit("s", "a", "a@b.c", stamp, "feat: x").day.isoformat() == "2025-03-30"

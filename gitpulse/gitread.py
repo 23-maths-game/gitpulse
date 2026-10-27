@@ -27,6 +27,27 @@ FIELD = "\x1f"  # field separator
 NUMSTAT_RE = re.compile(r"^(\d+|-)\t(\d+|-)\t(.+)$")
 
 
+def parse_git_timestamp(value: str) -> datetime | None:
+    """Parse git's strict ISO-8601 ``%aI`` output, or return ``None``.
+
+    Portability trap: git emits a literal ``Z`` suffix for UTC commits
+    (``2025-03-30T23:00:00Z``), and ``datetime.fromisoformat()`` only learned to
+    accept ``Z`` in Python 3.11. On 3.10 every UTC commit would raise ValueError
+    and be *silently skipped* — an empty or under-counted report with no error.
+    Normalising to ``+00:00`` first is accepted by every supported version.
+    """
+    value = value.strip()
+    if value[-1:] in {"Z", "z"}:
+        value = value[:-1] + "+00:00"
+    # Python 3.10 also rejects the compact "+0530" offset (colon is mandatory),
+    # so normalise it too — git's %ai format uses exactly that shape.
+    value = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", value)
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 class GitError(RuntimeError):
     """Raised when git is missing, the path is not a repo, or a command fails."""
 
@@ -121,9 +142,8 @@ def _parse(output: str) -> list[Commit]:
                 current = None
                 continue
             sha, name, email, iso_ts, subject = header[0], header[1], header[2], header[3], FIELD.join(header[4:])
-            try:
-                ts = datetime.fromisoformat(iso_ts.strip())
-            except ValueError:
+            ts = parse_git_timestamp(iso_ts)
+            if ts is None:
                 current = None
                 continue
             current = Commit(

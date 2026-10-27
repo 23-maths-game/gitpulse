@@ -3,6 +3,25 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [SemVer](https://semver.org/).
 
+## [1.1.1] — 2026-10-27
+
+### Fixed
+
+- **Silent data loss on Python 3.10 for UTC commits.** git's `%aI` format emits
+  a bare `Z` suffix (`2025-03-30T23:00:00Z`), and `datetime.fromisoformat()`
+  only learned to accept `Z` in Python 3.11. On 3.10 every UTC-timestamped
+  commit raised `ValueError`, was skipped without a warning, and the report came
+  back empty or under-counted — exit code 0, no error, wrong numbers.
+  Timestamps now go through `gitread.parse_git_timestamp()`, which normalises
+  `Z` → `+00:00` and compact `+0530` → `+05:30` before parsing. Caught by the
+  CI matrix on `py3.10 / ubuntu-latest`; reproduced locally on CPython 3.10.22.
+
+### Tests
+
+- 53 tests (was 46): offset matrix for `Z`, lowercase `z`, `+00:00`, `+05:30`
+  and compact `-0700`, garbage rejection, and an assertion that a UTC commit is
+  not dropped. Suite now verified on both 3.10 and 3.13 locally.
+
 ## [1.1.0] — 2026-10-27
 
 ### Added
