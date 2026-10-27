@@ -18,6 +18,10 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+BOTS = [
+    ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com"),
+    ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com"),
+]
 AUTHORS = [
     ("Ada Lovelace", "ada@example.com"),
     ("Grace Hopper", "grace@example.com"),
@@ -81,6 +85,24 @@ def main(target: str = "/tmp/gitpulse-demo") -> int:
             hour = rng.choice([9, 10, 10, 11, 11, 12, 14, 14, 15, 16, 17, 21, 22, 23])
             when = day.replace(hour=hour, minute=rng.randint(0, 59))
             author = rng.choices(AUTHORS, weights=[5, 3, 4, 2])[0]
+
+            # ~1 in 9 commits is automation, so bot filtering has something to do.
+            if rng.random() < 0.11:
+                author = rng.choice(BOTS)
+                when = day.replace(hour=3, minute=rng.randint(0, 59))
+                subject = rng.choice(
+                    ["chore(deps): bump requests from 2.31.0 to 2.32.0",
+                     "chore(deps-dev): bump pytest",
+                     "ci: refresh workflow matrix"]
+                )
+                (repo / "requirements.txt").write_text(
+                    f"requests=={rng.randint(2, 3)}.{rng.randint(0, 9)}.{rng.randint(0, 9)}\n",
+                    encoding="utf-8",
+                )
+                git(repo, "add", "-A", when=when, author=author)
+                git(repo, "commit", "-q", "-m", subject, when=when, author=author)
+                commits += 1
+                continue
 
             ctype = rng.choices(TYPES, weights=[30, 26, 8, 14, 10, 6, 4, 2])[0]
             scope = rng.choice(SCOPES)

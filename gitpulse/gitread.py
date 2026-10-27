@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import Commit, FileChange
@@ -156,10 +156,18 @@ def _parse(output: str) -> list[Commit]:
     return commits
 
 
+def git_date(value: datetime) -> str:
+    """Format a datetime the way git parses it unambiguously (``+0000`` offsets)."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
 def read_commits(
     path: str | Path = ".",
     *,
     since: str | None = None,
+    until: str | datetime | None = None,
     author: str | None = None,
     limit: int | None = None,
 ) -> list[Commit]:
@@ -173,6 +181,8 @@ def read_commits(
     ]
     if since:
         args.append(f"--since={since}")
+    if until:
+        args.append(f"--until={git_date(until) if isinstance(until, datetime) else until}")
     if author:
         args.append(f"--author={author}")
     if limit:

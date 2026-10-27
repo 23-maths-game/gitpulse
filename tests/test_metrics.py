@@ -4,8 +4,17 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+import pytest
+
 from gitpulse import gitread
-from gitpulse.metrics import analyze, extension_breakdown, longest_streak
+from gitpulse.metrics import (
+    analyze,
+    compare,
+    extension_breakdown,
+    filter_bots,
+    is_bot,
+    longest_streak,
+)
 from gitpulse.models import Commit, FileChange
 
 
@@ -105,3 +114,93 @@ def test_to_dict_is_json_safe(sample_repo):
 
     payload = json.dumps(analyze(gitread.read_commits(sample_repo)).to_dict())
     assert '"bus_factor": 1' in payload
+
+
+# --------------------------------------------------------------------------- #
+# Bot filtering
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("name", "email"),
+    [
+        ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com"),
+        ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com"),
+        ("renovate-bot", "bot@renovateapp.com"),
+        ("snyk-bot", "snyk@example.com"),
+        ("pre-commit-ci", "ci@example.com"),
+        ("Claude", "claude@example.com"),
+        ("Automation", "automation@example.com"),
+    ],
+)
+def test_bot_detection_flags_automation(name, email):
+    from gitpulse.models import Commit
+
+    bot = Commit("x", name, email, _commit(1).timestamp, "chore: bump")
+    assert is_bot(bot)
+
+
+@pytest.mark.parametrize(
+    ("name", "email"),
+    [
+        ("Ada Lovelace", "ada@example.com"),
+        ("Robert Botwright", "robert@example.com"),
+        ("Botanist Kim", "kim@example.com"),
+        ("Grace Hopper", "grace@navy.mil"),
+    ],
+)
+def test_bot_detection_leaves_humans_alone(name, email):
+    from gitpulse.models import Commit
+
+    human = Commit("x", name, email, _commit(1).timestamp, "feat: real work")
+    assert not is_bot(human)
+
+
+def test_filter_bots_returns_count_and_keeps_humans():
+    from gitpulse.models import Commit
+
+    ts = _commit(1).timestamp
+    humans = [_commit(1, email="a@x.com"), _commit(2, email="b@x.com")]
+    bots = [
+        Commit("b1", "dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com", ts, "chore(deps): bump"),
+        Commit("b2", "renovate-bot", "bot@renovateapp.com", ts, "chore: pin"),
+    ]
+    kept, dropped = filter_bots(humans + bots)
+    assert len(kept) == 2 and dropped == 2
+    assert all(not is_bot(c) for c in kept)
+
+
+# --------------------------------------------------------------------------- #
+# Period comparison
+# --------------------------------------------------------------------------- #
+def _analysis(commits):
+    return analyze(commits)
+
+
+def test_compare_reports_direction_and_sentiment():
+    baseline = _analysis([_commit(1, email="a@x.com"), _commit(2, email="a@x.com")])
+    current = _analysis([_commit(3, email="a@x.com"), _commit(4, email="a@x.com"), _commit(5, email="a@x.com")])
+    rows = {d.label: d for d in compare(current, baseline)}
+
+    assert rows["Commits"].change == 1
+    assert rows["Commits"].sentiment == "better"          # more commits = better
+    assert rows["Commits"].pct == pytest.approx(50.0)
+    # Bus factor going up is bad: one person owning everything is a risk.
+    bus = rows["Bus factor"]
+    assert bus.higher_is_better is False
+    assert bus.sentiment in {"better", "worse", "flat"}
+
+
+def test_compare_pct_is_none_when_baseline_is_zero():
+    baseline = _analysis([])
+    current = _analysis([_commit(1)])
+    commit_row = next(d for d in compare(current, baseline) if d.label == "Commits")
+    assert commit_row.pct is None  # division by zero must not explode or lie
+
+
+def test_compare_net_lines_can_regress():
+    big_add = _analysis([Commit("a", "x", "x@y", _commit(1).timestamp, "feat: big", [FileChange("f.py", 500, 0)])])
+    small_add = _analysis([Commit("b", "x", "x@y", _commit(1).timestamp, "feat: small", [FileChange("f.py", 10, 0)])])
+    net = next(d for d in compare(small_add, big_add) if d.label == "Net lines")
+    assert net.change == -490
+    assert net.sentiment == "worse"

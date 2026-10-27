@@ -3,6 +3,48 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [SemVer](https://semver.org/).
 
+## [1.1.0] — 2026-10-27
+
+### Added
+
+- **`--compare-to DATE`** — period-over-period comparison. The window since
+  `DATE` is measured against the immediately preceding window of equal length,
+  rendered as a colour-coded delta table (green = improved, red = regressed,
+  grey = neutral) and emitted under `comparison` in `--json`. The baseline is
+  derived from real commit timestamps and uses a half-open window
+  `[start − span, start)`, because git's `--since`/`--until` are both inclusive
+  and would otherwise count the boundary commit in both windows.
+- **Bot filtering, on by default** — `dependabot[bot]`, `renovate-bot`,
+  `github-actions[bot]`, `*-ci`, `snyk-bot`, `automation` and similar accounts
+  are excluded before aggregation, with the excluded count surfaced as a badge
+  in the report and under `notes` in JSON. `--include-bots` opts back in.
+- `gitread.read_commits(..., until=...)` and `gitread.git_date()` for
+  unambiguous `+0000`-offset timestamps in git arguments.
+- New public API surface: `gitpulse.compare`, `gitpulse.filter_bots`,
+  `gitpulse.is_bot`.
+- GitHub Pages workflow that publishes a live report of the repository itself
+  plus both demo pages.
+- `docs/demo-comparison.html` — a second committed demo showing compare mode.
+
+### Changed
+
+- README now documents the real `--help` output instead of a hand-written
+  approximation of it.
+- Demo history generator emits ~11% bot commits and real deletions, so the
+  bot filter and churn charts have something to work with.
+
+### Fixed
+
+- Boundary commits were double-counted between comparison windows (see the
+  half-open window note above).
+
+### Tests
+
+- 46 tests (was 27): bot detection positive/negative matrices, `filter_bots`
+  counts, comparison direction/sentiment/percentage maths, `pct is None` on a
+  zero baseline, empty-baseline CLI runs, and JSON/HTML wiring for both new
+  flags.
+
 ## [1.0.0] — 2026-10-27
 
 First stable release. Feature-complete and covered by tests on Python 3.10–3.13,

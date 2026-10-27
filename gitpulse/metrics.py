@@ -5,7 +5,9 @@ No I/O happens here, which is what makes the whole module trivially testable.
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import PurePosixPath
 
@@ -211,3 +213,83 @@ def extension_breakdown(files: list[FileStat]) -> list[tuple[str, int]]:
         suffix = PurePosixPath(f.path).suffix.lower()
         bucket[suffix or "<none>"] += f.changes
     return sorted(bucket.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+# --------------------------------------------------------------------------- #
+# Bot / automation filtering
+# --------------------------------------------------------------------------- #
+# Commit bots distort every author-facing metric: dependabot alone can out-commit
+# the entire team and quietly push the bus factor to a meaningless "1".
+BOT_RE = re.compile(
+    r"""(?xi)
+    \[bot\]                          # GitHub Apps: "dependabot[bot]"
+    | ^(?:dependabot|renovate|github-actions|pre-commit-ci|snyk-bot|
+          greenkeeper|mergify|allcontributors|semantic-release-bot|
+          pyup-bot|imgbot|restyled|codecov|sonarcloud|copilot|claude|codex)[-\w]*
+    | (?:^|[-_.@])(?:bot|ci|automation|crawler)(?:$|[-_.@\d])
+    | @(?:users\.noreply\.github\.com$)
+    """,
+)
+
+
+def is_bot(commit: Commit) -> bool:
+    """True when a commit was authored by automation rather than a human."""
+    return bool(BOT_RE.search(commit.author_name.strip()) or BOT_RE.search(commit.author_email.strip()))
+
+
+def filter_bots(commits: list[Commit]) -> tuple[list[Commit], int]:
+    """Split commits into ``(humans, dropped_bot_commits)``."""
+    humans = [c for c in commits if not is_bot(c)]
+    return humans, len(commits) - len(humans)
+
+
+# --------------------------------------------------------------------------- #
+# Period-over-period comparison
+# --------------------------------------------------------------------------- #
+@dataclass(slots=True)
+class Delta:
+    """One row of the period-comparison table."""
+
+    label: str
+    baseline: float
+    current: float
+    unit: str = ""
+    higher_is_better: bool | None = None  # None = neutral metric, no colour
+
+    @property
+    def change(self) -> float:
+        return self.current - self.baseline
+
+    @property
+    def pct(self) -> float | None:
+        """Relative change, or ``None`` when the baseline is zero (undefined)."""
+        return None if self.baseline == 0 else (self.change / self.baseline) * 100.0
+
+    @property
+    def sentiment(self) -> str:
+        """``better`` / ``worse`` / ``flat`` — drives the colour in the report."""
+        if self.change == 0 or self.higher_is_better is None:
+            return "flat"
+        good = self.change > 0 if self.higher_is_better else self.change < 0
+        return "better" if good else "worse"
+
+
+def compare(current: Analysis, baseline: Analysis) -> list[Delta]:
+    """Build the delta rows for ``current`` measured against ``baseline``."""
+
+    def per_day(a: Analysis) -> float:
+        return round(a.avg_commits_per_active_day, 2)
+
+    return [
+        Delta("Commits", baseline.commits_analyzed, current.commits_analyzed, higher_is_better=True),
+        Delta("Contributors", len(baseline.authors), len(current.authors), higher_is_better=None),
+        Delta("Lines added", baseline.added, current.added, higher_is_better=None),
+        Delta("Lines deleted", baseline.deleted, current.deleted, higher_is_better=None),
+        Delta("Net lines", baseline.added - baseline.deleted, current.added - current.deleted,
+              higher_is_better=True),
+        Delta("Active days", baseline.active_days, current.active_days, higher_is_better=True),
+        Delta("Commits / active day", per_day(baseline), per_day(current), higher_is_better=True),
+        Delta("Bus factor", baseline.bus_factor, current.bus_factor, higher_is_better=False),
+        Delta("Longest streak", baseline.longest_streak, current.longest_streak,
+              unit="d", higher_is_better=True),
+    ]

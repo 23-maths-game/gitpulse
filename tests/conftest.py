@@ -92,3 +92,32 @@ def sample_repo(repo: Path) -> Path:
         {"app/core.py": updated[:-1] + ["tail a", "tail b"]},
     )
     return repo
+
+
+@pytest.fixture()
+def bot_repo(repo: Path) -> Path:
+    """2 human commits + 2 dependabot commits, so bot filtering is observable."""
+
+    def commit(date: str, name: str, email: str, subject: str, rel: str, lines: int) -> None:
+        target = repo / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("\n".join(f"x{i}" for i in range(lines)) + "\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(
+            repo, "-c", f"user.name={name}", "-c", f"user.email={email}",
+            "commit", "-q", "-m", subject,
+            env={
+                "GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email,
+                "GIT_AUTHOR_DATE": f"{date}T09:00:00+0000",
+                "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email,
+                "GIT_COMMITTER_DATE": f"{date}T09:00:00+0000",
+            },
+        )
+
+    bot_email = "49699333+dependabot[bot]@users.noreply.github.com"
+    commit("2024-05-01", "Dev One", "dev1@example.com", "feat: ship api", "app.py", 30)
+    commit("2024-05-01", "dependabot[bot]", bot_email, "chore(deps): bump requests", "requirements.txt", 5)
+    commit("2024-05-02", "Dev Two", "dev2@example.com", "fix: handle null", "app.py", 12)
+    commit("2024-05-02", "Dev One", "dev1@example.com", "test: cover null path", "tests/test_app.py", 20)
+    commit("2024-05-02", "dependabot[bot]", bot_email, "chore(deps): bump urllib3", "requirements.txt", 7)
+    return repo

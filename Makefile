@@ -18,9 +18,10 @@ fmt:  ## Auto-fix lint issues
 report:  ## Analyse this repository
 	$(PY) -m gitpulse . -o gitpulse-report.html --open
 
-demo:  ## Rebuild the committed demo report
+demo:  ## Rebuild the committed demo reports
 	$(PY) scripts/make_demo_repo.py $(DEMO_DIR)
-	$(PY) -m gitpulse $(DEMO_DIR) -o docs/demo-report.html
+	$(PY) -m gitpulse $(DEMO_DIR) -o docs/demo-report.html -q
+	$(PY) -m gitpulse $(DEMO_DIR) -o docs/demo-comparison.html --compare-to "2025-01-01" -q
 
 build:  ## Build sdist + wheel
 	$(PY) -m pip install -q build && $(PY) -m build

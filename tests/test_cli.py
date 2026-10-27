@@ -56,3 +56,54 @@ def test_render_escapes_untrusted_commit_paths():
     html = render_html(analyze([commit]))
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
+
+
+# --------------------------------------------------------------------------- #
+# --compare-to : window vs preceding window of equal length
+# --------------------------------------------------------------------------- #
+def test_compare_to_adds_comparison_to_json_and_html(bot_repo, tmp_path):
+    out, payload = tmp_path / "c.html", tmp_path / "c.json"
+    code = main([str(bot_repo), "--compare-to", "2024-05-02", "--out", str(out), "--json", str(payload), "-q"])
+    assert code == 0
+
+    data = json.loads(payload.read_text())
+    assert "comparison" in data
+    rows = {row["metric"]: row for row in data["comparison"]}
+    assert {"Commits", "Contributors", "Bus factor"} <= set(rows)
+    assert rows["Commits"]["current"] == 2          # two human commits on 2024-05-02
+    assert rows["Commits"]["baseline"] == 1         # one human commit in the prior window
+    assert rows["Commits"]["change"] == 1
+
+    html = out.read_text(encoding="utf-8")
+    assert "Period comparison" in html
+    assert "improved" in html and "regressed" in html
+
+
+def test_compare_to_handles_empty_baseline(bot_repo, tmp_path):
+    """A repo whose whole history sits inside the current window must not crash."""
+    out = tmp_path / "empty-base.html"
+    assert main([str(bot_repo), "--compare-to", "2000-01-01", "--out", str(out), "-q"]) == 0
+    assert "Period comparison" in out.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Bot filtering
+# --------------------------------------------------------------------------- #
+def test_bots_excluded_by_default_with_a_note(bot_repo, tmp_path):
+    out, payload = tmp_path / "bots.html", tmp_path / "bots.json"
+    main([str(bot_repo), "--out", str(out), "--json", str(payload), "-q"])
+    data = json.loads(payload.read_text())
+    assert data["totals"]["commits_analyzed"] == 3
+    assert data["notes"] == ["2 bot commits excluded"]
+    assert [a["name"] for a in data["authors"]] == ["Dev One", "Dev Two"]
+    assert "bot commits excluded" in out.read_text(encoding="utf-8")
+
+
+def test_include_bots_keeps_automation(bot_repo, tmp_path):
+    payload = tmp_path / "with-bots.json"
+    main([str(bot_repo), "--include-bots", "--out", str(tmp_path / "b.html"),
+          "--json", str(payload), "-q"])
+    data = json.loads(payload.read_text())
+    assert data["totals"]["commits_analyzed"] == 5
+    assert data["notes"] == []
+    assert any("dependabot" in a["name"] for a in data["authors"])

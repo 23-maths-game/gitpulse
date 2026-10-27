@@ -42,7 +42,10 @@ jobs:
         run: python -m pytest -q
 
       - name: Smoke-test the CLI
-        run: python -m gitpulse . -o report.html --json metrics.json -q
+        run: |
+          python -m gitpulse . -o report.html --json metrics.json -q
+          python -m gitpulse . --compare-to "1 year ago" -o compare.html -q
+          python -m gitpulse . --include-bots -o with-bots.html -q
 
       - name: Prove the report is self-contained
         run: python -c "import pathlib,sys; h=pathlib.Path('report.html').read_text(); sys.exit(0 if '<script' not in h and 'http://' not in h and 'https://' not in h else 1)"

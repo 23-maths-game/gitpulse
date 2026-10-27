@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 from datetime import datetime, timezone
 
-from .metrics import extension_breakdown
+from .metrics import Delta, extension_breakdown
 from .models import Analysis
 
 ACCENT = "#38bdf8"
@@ -85,6 +85,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .chip{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:12px;color:#cbd8e4}
 .chip b{color:var(--accent);font-variant-numeric:tabular-nums;margin-left:6px}
 .empty{color:var(--muted);font-size:13px;padding:10px 0}
+table.cmp td{font-size:13.5px}
+table.cmp td.lbl{color:#cbd8e4}
+.better{color:var(--ok);font-weight:600}
+.worse{color:var(--del);font-weight:600}
+.flat{color:var(--muted)}
+.pill-note{display:inline-flex;gap:7px;align-items:center;background:rgba(245,158,11,.09);
+  border:1px solid rgba(245,158,11,.35);color:#fbbf24;font-size:11.5px;padding:5px 11px;
+  border-radius:999px;margin-left:6px}
+.headline{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:12px}
+.headline .big{font-size:19px;font-weight:700;letter-spacing:-.3px}
+.headline .vs{color:var(--muted);font-size:12.5px}
 footer{margin-top:26px;color:#5f6f7f;font-size:11.5px;text-align:center}
 footer a{color:#7c8fa1}
 """
@@ -291,7 +302,57 @@ def _types_panel(a: Analysis) -> str:
     return f'<div class="chips">{"".join(chips)}</div>'
 
 
-def render_html(a: Analysis, *, title: str | None = None) -> str:
+def _fmt(value: float) -> str:
+    """Pretty-print a metric: thousands separators for ints, one decimal otherwise."""
+    if isinstance(value, float) and not float(value).is_integer():
+        return f"{value:,.2f}"
+    return _n(round(value))
+
+
+def _comparison_panel(deltas: list[Delta], baseline: Analysis) -> str:
+    """Period-over-period table: baseline | current | delta, colour-coded."""
+    rows = []
+    for d in deltas:
+        sentiment = d.sentiment
+        arrow = "→" if d.change == 0 else ("↑" if d.change > 0 else "↓")
+        magnitude = f"{arrow} {_n(abs(round(d.change)))}{d.unit}"
+        pct = d.pct
+        suffix = f" ({pct:+.0f}%)" if pct is not None else ""
+        rows.append(
+            "<tr>"
+            f'<td class="lbl">{_esc(d.label)}</td>'
+            f'<td class="num mono">{_fmt(d.baseline)}{d.unit}</td>'
+            f'<td class="num mono">{_fmt(d.current)}{d.unit}</td>'
+            f'<td class="num mono {sentiment}">{magnitude}{suffix}</td>'
+            "</tr>"
+        )
+
+    span = "previous period"
+    if baseline.first_commit and baseline.last_commit:
+        span = f"{baseline.first_commit:%d %b %Y} → {baseline.last_commit:%d %b %Y}"
+
+    return (
+        '<div class="headline">'
+        '<span class="big">Current window</span>'
+        f'<span class="vs">measured against {_esc(span)}</span>'
+        "</div>"
+        '<table class="cmp"><thead><tr><th>Metric</th><th class="num">Baseline</th>'
+        '<th class="num">Current</th><th class="num">Change</th></tr></thead>'
+        "<tbody>" + "".join(rows) + "</tbody></table>"
+        '<div class="legend"><span><b class="better">green</b> = improved</span>'
+        '<span><b class="worse">red</b> = regressed</span>'
+        "<span>grey = neutral metric</span></div>"
+    )
+
+
+def render_html(
+    a: Analysis,
+    *,
+    title: str | None = None,
+    comparison: list[Delta] | None = None,
+    baseline: Analysis | None = None,
+    notes: list[str] | None = None,
+) -> str:
     """Render the full report as one self-contained HTML document."""
     page_title = title or f"gitpulse · {a.repo_name}"
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -302,6 +363,12 @@ def render_html(a: Analysis, *, title: str | None = None) -> str:
     streak_note = ""
     if a.streak_start and a.streak_end and a.longest_streak > 1:
         streak_note = f'<div class="hint">best run {a.streak_start:%d %b} → {a.streak_end:%d %b}</div>'
+
+    comparison_card = ""
+    if comparison and baseline is not None:
+        comparison_card = f'<div class="card" style="margin-bottom:15px"><h2>Period comparison</h2>{_comparison_panel(comparison, baseline)}</div>'
+
+    notes_html = "".join(f'<span class="pill-note">{_esc(n)}</span>' for n in (notes or []))
 
     body = f"""<!doctype html>
 <html lang="en">
@@ -327,11 +394,13 @@ def render_html(a: Analysis, *, title: str | None = None) -> str:
     </div>
     <div>
       <span class="pill"><span class="dot"></span>{_esc(a.branch)}</span>
-      <span class="pill mono">{_esc(a.head_sha or "no HEAD")}</span>
+      <span class="pill mono">{_esc(a.head_sha or "no HEAD")}</span>{notes_html}
     </div>
   </header>
 
   {_kpis(a)}
+
+  {comparison_card}
 
   <div class="grid two" style="margin-bottom:15px">
     <div class="card">
