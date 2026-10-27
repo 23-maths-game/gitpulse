@@ -27,7 +27,7 @@ dev = ["pytest>=8.0", "ruff>=0.6"]
 gitpulse = "gitpulse.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-username/gitpulse"
+Homepage = "https://github.com/23-maths-game/gitpulse"
 
 [tool.hatch.build.targets.wheel]
 packages = ["gitpulse"]

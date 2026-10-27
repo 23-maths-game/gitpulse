@@ -18,7 +18,7 @@ Thanks for being here. The bar is high, the surface is small — that's on purpo
 ## Setup
 
 ```bash
-git clone https://github.com/your-username/gitpulse.git
+git clone https://github.com/23-maths-game/gitpulse.git
 cd gitpulse
 pip install -e ".[dev]"
 make test

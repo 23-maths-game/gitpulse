@@ -2,10 +2,12 @@
 
 **Zero-dependency git repository intelligence.** Turn any repository's history into a single, self-contained interactive HTML report — dependency-free, network-free, framework-free.
 
-[![CI](https://github.com/your-username/gitpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/gitpulse/actions/workflows/ci.yml)
+[![CI](https://github.com/23-maths-game/gitpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/23-maths-game/gitpulse/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](pyproject.toml)
+
+**[🔴 Live demo](https://23-maths-game.github.io/gitpulse/)** · **[📊 Full report](https://23-maths-game.github.io/gitpulse/demo-report.html)** · **[⚖️ Compare mode](https://23-maths-game.github.io/gitpulse/demo-comparison.html)**
 
 ```bash
 gitpulse .                                  # analyse the repo you're standing in
@@ -13,7 +15,7 @@ gitpulse . --compare-to "3 months ago"      # this quarter vs last quarter
 gitpulse ~/code/api --since "6 months ago" --json stats.json --open
 ```
 
-> 📊 **[Full demo report →](docs/demo-report.html)** · **[Period-comparison demo →](docs/demo-comparison.html)**
+> 📊 Committed demos: **[full report](docs/demo-report.html)** · **[period comparison](docs/demo-comparison.html)**
 > (both generated from a 455-commit synthetic history with 4 humans and 2 bots)
 
 ---
@@ -40,7 +42,7 @@ retro deck, or a README without a single `npm install`.
 
 ```bash
 # straight from source (no build step)
-git clone https://github.com/your-username/gitpulse.git
+git clone https://github.com/23-maths-game/gitpulse.git
 cd gitpulse
 python -m gitpulse --version
 
